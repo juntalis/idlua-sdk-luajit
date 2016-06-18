@@ -1,7 +1,19 @@
-local strformat,     strfind,     substr =
-      string.format, string.find, string.sub
+local strformat,     strfind,     substr,     strmatch =
+      string.format, string.find, string.sub, string.match
 
 local BITOP_DOCUMENTATION_URL = "http://bitop.luajit.org/api.html"
+
+---
+-- Generate the anchor id based on the API name.
+-- @param name The name to generate an anchor ID for.
+-- @return the anchor id
+local function getAnchorId(name)
+	local anchor = name
+	if strfind(name, '.', 1, true) ~= nil then
+		anchor = select(2, strmatch(name, '(.+%.)([^.]+)'))
+	end
+	return anchor
+end
 
 ---
 -- Generate the html fragment to search for.
@@ -9,7 +21,7 @@ local BITOP_DOCUMENTATION_URL = "http://bitop.luajit.org/api.html"
 -- @return the anchor id
 --
 local function getAPILandmark(name)
-	return strformat([[<h3 id="%s"><tt>(.-)</tt></h3>()]], name)
+	return strformat([[<h3 id="%s"><tt>(.-)</tt></h3>()]], getAnchorId(name))
 end
 
 --- Quickhelp Documentation (ctrl-Q)
@@ -34,11 +46,7 @@ end
 -- @param name The name to get documentation for.
 -- @return the URL of the external documentation
 function getDocumentationUrl(name)
-	local anchor = name
-	if string.find(name, '.', 1, true) ~= nil then
-		anchor = select(2, string.match(name, '(.+%.)([^.]+)'))
-	end
-	return BITOP_DOCUMENTATION_URL .. '#' .. anchor
+	return BITOP_DOCUMENTATION_URL .. '#' .. getAnchorId(name)
 end
 
 --- Quick Navigation Tooltip Text, (ctrl-hover on symbol)
