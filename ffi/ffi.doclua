@@ -1,0 +1,131 @@
+local strformat,     strfind,     substr,     gsubstr =
+      string.format, string.find, string.sub, string.gsub
+
+local DOC_PREFIX = 'doc_element://'
+local FFI_DOCUMENTATION_URL = "http://luajit.org/ext_ffi_api.html"
+
+---
+-- Generate the anchor id based on the API name.
+-- @param name The name to generate an anchor ID for.
+-- @return the anchor id
+--
+local function getAnchorId(name)
+	return gsubstr(name, '%.', '_')
+end
+
+---
+-- Resolve the API name based on the anchor ID
+-- @param anchor The anchor id
+-- @return the API name
+local function anchorToName(anchor)
+	if substr(anchor, 1, 1) == '#' then anchor = substr(anchor, 2) end
+	return gsubstr(anchor, '_', '.')
+end
+
+---
+-- Given a HTML fragment containing an anchor link, replace it with a doc link
+-- @param prefix HTML in our capture preceding the attribute containing our anchor
+-- @param quote Quote character - if any
+-- @param anchor Anchor ID
+-- @return the fragment with a documentation link instead
+--
+local function anchorLinkToDocLink(prefix, quote, anchor)
+	local name, result
+	name = anchorToName(anchor)
+	result = prefix .. quote .. DOC_PREFIX .. name .. quote
+	return result
+end
+
+---
+-- Generate the html fragment to search for.
+-- @param name The name to generate an anchor ID for.
+-- @return the anchor id
+--
+local function getAPILandmark(name)
+	return strformat([[<h3 id="%s"><tt>(.-)</tt></h3>()]], getAnchorId(name))
+end
+
+--- Quickhelp Documentation (ctrl-Q)
+-- This is called when the user invokes quick help via ctrl-q, or by
+-- having the quickhelp panel open and set to autolookup
+-- @param name The name to get documentation for.
+-- @return the documentation as an HTML or plain text string
+function getDocumentation(name)
+	-- Use for development
+	local landmark = getAPILandmark(name)
+	local data = fetchURL(FFI_DOCUMENTATION_URL)
+	local api, begin = select(3, strfind(data, landmark))
+	if (api == nil) or (begin == nil) then return end
+	local finish = strfind(data, '<h%d id="', begin, false)
+	local result = [[<html><body><p><strong>]] .. api .. [[</strong></p>]]
+	result = result .. substr(data, begin, finish-1) .. [[</body></html>]]
+	return gsubstr(result, '( href=)("?)(#[^"]-)%2', anchorLinkToDocLink)
+end
+
+--- External Documentation URL (shift-F1)
+-- This is called by shift-F1 on the symbol, or by the
+-- external documentation button on the quick help panel
+-- @param name The name to get documentation for.
+-- @return the URL of the external documentation
+function getDocumentationUrl(name)
+	return FFI_DOCUMENTATION_URL .. '#' .. getAnchorId(name)
+end
+
+--- Quick Navigation Tooltip Text, (ctrl-hover on symbol)
+-- This is called when the user ctrl-hovers over a symbol
+-- @param name The name to get documentation for.
+-- @return the documentation as a plain text string
+function getQuickNavigateDocumentation(name)
+	local sig = SIGNATURES[name]
+	if not sig then return end
+	if type(sig) == 'table' then
+		local count = #sig
+		local buffer = sig[1]
+		if count > 1 then
+			for idx = 2,len do
+				buffer = buffer .. '\r\n' .. sig[idx]
+			end
+		end
+	end
+	return '[FFI API]\r\n' .. sig
+end
+
+SIGNATURES = {
+	ffi = { [=[(table) FFI Library]=], },
+
+	-- Declaring and Accessing External Symbols
+	["ffi.cdef"] = [=[ffi.cdef (def)]=],
+	["ffi.C"] =  [=[(table) C Namespace]=],
+	["ffi.load"] = [=[clib = ffi.load (name [, global])]=],
+
+	-- Creating cdata Objects
+	["ffi.new"] = {
+		[=[cdata = ffi.new (ct [, nelem] [, init, ...])]=],
+		[=[cdata = ctype([nelem,] [init...])]=],
+	},
+	["ffi.typeof"] = [=[ctype = ffi.typeof (ct)]=],
+	["ffi.cast"] = [=[cdata = ffi.cast (ct, init)]=],
+	["ffi.metatype"] = [=[ctype = ffi.metatype (ct, metatable)]=],
+	["ffi.gc"] = [=[cdata = ffi.gc (cdata, finalizer)]=],
+
+	-- C Type Information
+	["ffi.sizeof"] = [=[size = ffi.sizeof (ct [, nelem])]=],
+	["ffi.alignof"] = [=[align = ffi.alignof (ct)]=],
+	["ffi.offsetof"] = [=[ofs [,bpos,bsize] = ffi.offsetof (ct, field)]=],
+	["ffi.istype"] = [=[status = ffi.istype (ct, obj)]=],
+	["ffi.typeinfo"] = [=[ctinfotable = ffi.typeinfo (ct)]=],
+
+	-- Utility Functions
+	["ffi.errno"] = [=[err = ffi.errno ([newerr])]=],
+	["ffi.string"] = [=[str = ffi.string (ptr [,len])]=],
+	["ffi.copy"] = {
+		[=[ffi.copy (dst, src, len)]=],
+		[=[ffi.copy (dst, str)]=]
+	},
+	["ffi.fill"] = [=[ffi.fill (dst, len [,c])]=],
+	["ffi.abi"] = [=[status = ffi.abi (param)]=],
+
+	-- Target-specific Information
+	["ffi.os"] = {[=[(string) Target OS Name ]=]},
+	["ffi.arch"] = { [=[(string) Target Architecture]=] },
+}
